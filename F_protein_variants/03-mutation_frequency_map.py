@@ -21,15 +21,18 @@ sns.set_context("notebook", font_scale=1.1) # Adjusted base font scale slightly
 sns.set_style("ticks")
 
 # --- Configuration ---
-INPUT_FREQUENCY_TABLE = Path("rsv_F_mutation_frequency_by_country_mafft_extracted_final.tsv")
-OUTPUT_HEATMAP_FILE_A = Path("rsv_A_mutation_heatmap_UAE_vs_Public_gt1pct_or_gt2strains_gt30samples_v4.svg") # Incremented version
-OUTPUT_HEATMAP_FILE_B = Path("rsv_B_mutation_heatmap_UAE_vs_Public_gt1pct_or_gt2strains_gt30samples_v4.svg") # Incremented version
-UAE_FREQUENCY_THRESHOLD = 0.01  # Greater than 1%
-MIN_UAE_STRAIN_COUNT = 2        # At least 2 UAE strains
-MIN_SAMPLE_THRESHOLD = 30       # Minimum samples for public data countries to be included
+RESULTS_DIR = Path("results")
+INPUT_FREQUENCY_TABLE = RESULTS_DIR / "rsv_F_mutation_frequency_by_country_mafft_extracted_final.tsv"
+OUTPUT_HEATMAP_FILE_A = RESULTS_DIR / "rsv_A_mutation_heatmap_UAE_vs_Public_gt1pct_or_gt2strains_gt30samples_v4.svg"
+OUTPUT_HEATMAP_FILE_B = RESULTS_DIR / "rsv_B_mutation_heatmap_UAE_vs_Public_gt1pct_or_gt2strains_gt30samples_v4.svg"
+# Per-type UAE frequency thresholds
+UAE_FREQUENCY_THRESHOLD_A = 0.01  # >1% for RSV-A
+UAE_FREQUENCY_THRESHOLD_B = 0.01  # >1% for RSV-B
+MIN_UAE_STRAIN_COUNT = 2          # Keep at least 3 UAE strains to avoid singletons
+MIN_SAMPLE_THRESHOLD = 30         # Minimum samples for public data countries to be included
 ROW_MIN_FREQUENCY_FILTER_THRESHOLD = 0.95 # Filter out mutations if all countries have freq > this
 F_PROTEIN_LENGTH = 574 # Max length of F protein for the site axis
-PUBLIC_DATA_YEAR_RANGE = "2023" # For plot title
+PUBLIC_DATA_YEAR_RANGE = "2021-2024" # For plot title
 
 # --- Helper function for sorting mutations ---
 def get_pos_from_mutation(mut_str):
@@ -140,8 +143,8 @@ def generate_heatmap(data_df, virus_type, output_filename):
     cbar_ax.yaxis.label.set_size(14)
     cbar_ax.tick_params(labelsize=12)
 
-    # Updated title to reflect new UAE filtering criteria
-    uae_filter_desc = f"UAE: >{UAE_FREQUENCY_THRESHOLD*100:.0f}% Freq and ≥{MIN_UAE_STRAIN_COUNT} Strains"
+    # Updated title to reflect new UAE filtering criteria (per-type thresholds)
+    uae_filter_desc = f"UAE: >{UAE_FREQUENCY_THRESHOLD_A*100:.0f}% (A) / >{UAE_FREQUENCY_THRESHOLD_B*100:.0f}% (B) and ≥{MIN_UAE_STRAIN_COUNT} strains"
     public_filter_desc = f"Public N > {MIN_SAMPLE_THRESHOLD}"
     row_filter_desc = f"Not all Freq > {ROW_MIN_FREQUENCY_FILTER_THRESHOLD*100:.0f}%"
     full_filter_description = f"({uae_filter_desc}; {public_filter_desc}; {row_filter_desc})"
@@ -294,7 +297,7 @@ if len(freq_df) < initial_rows:
     print(f"Warning: Dropped {initial_rows - len(freq_df)} rows due to missing/invalid Frequency or Total_Samples, or zero Total_Samples.", file=sys.stderr)
 
 
-print(f"Identifying mutations with frequency > {UAE_FREQUENCY_THRESHOLD*100:.0f}% AND found in at least {MIN_UAE_STRAIN_COUNT} strains in UAE...")
+print(f"Identifying mutations with frequency > {UAE_FREQUENCY_THRESHOLD_A*100:.0f}% (A) / {UAE_FREQUENCY_THRESHOLD_B*100:.0f}% (B) AND found in at least {MIN_UAE_STRAIN_COUNT} strains in UAE...")
 uae_df = freq_df[freq_df['Country'] == 'UAE'].copy()
 
 if uae_df.empty:
@@ -304,12 +307,16 @@ else:
     # Calculate the number of UAE strains with each mutation
     uae_df['Num_UAE_Strains_With_Mutation'] = uae_df['Frequency'] * uae_df['Total_Samples']
 
-    # Condition 1: Frequency > UAE_FREQUENCY_THRESHOLD
-    cond1_freq = uae_df['Frequency'] > UAE_FREQUENCY_THRESHOLD
+    # Per-type frequency threshold
+    freq_thresh_map = {'A': UAE_FREQUENCY_THRESHOLD_A, 'B': UAE_FREQUENCY_THRESHOLD_B}
+    uae_df['FreqThresh'] = uae_df['Type'].map(freq_thresh_map).fillna(1.0)
+
+    # Condition 1: Frequency > per-type threshold
+    cond1_freq = uae_df['Frequency'] > uae_df['FreqThresh']
     # Condition 2: At least MIN_UAE_STRAIN_COUNT UAE strains have the mutation
     cond2_count = uae_df['Num_UAE_Strains_With_Mutation'] >= MIN_UAE_STRAIN_COUNT
 
-    # Combine conditions with OR
+    # Combine conditions (AND)
     uae_selected_mutations_df = uae_df[cond1_freq & cond2_count]
     uae_high_freq_mutations = uae_selected_mutations_df['Mutation'].unique()
 

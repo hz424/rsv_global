@@ -13,6 +13,7 @@ eval "$(conda shell.bash hook)"
 conda activate ~/envs/rsv_env
 
 THREADS=${SLURM_NTASKS}
+# GENOME_SIZE="15k" # GENOME_SIZE was likely for Flye, can be removed if not used elsewhere
 FILTERED_DIR="filtered_reads"
 
 mkdir -p "${FILTERED_DIR}" # Only create the filtered reads directory
