@@ -1,0 +1,763 @@
+---
+title: "RSV Epi Analysis"
+author: "Madikay Senghore"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(broom)
+library(forcats)
+library(scales)
+library(MASS)
+library(cowplot)
+```
+
+## Load data and clean variables
+
+
+```{r}
+load("RSV_ARI_SARI_Formatted.RData")
+
+
+RSV_ARI_SARI_Formatted$RSV <- ""
+
+for (i in 1:nrow(RSV_ARI_SARI_Formatted)) {
+  if (!is.na(RSV_ARI_SARI_Formatted$RSV.A[i]) && RSV_ARI_SARI_Formatted$RSV.A[i] == "Detected") {
+    RSV_ARI_SARI_Formatted$RSV[i] <- "Detected"
+  }
+}
+
+
+
+rsva_index <- which((RSV_ARI_SARI_Formatted$RSV.A == "Detected"))
+rsvb_index <- which(RSV_ARI_SARI_Formatted$RSV.B %in% c("Detected", "detected"))
+
+RSV_ARI_SARI_Formatted$RSV[rsva_index] <- "Detected"
+RSV_ARI_SARI_Formatted$RSV[rsvb_index] <- "Detected"
+
+RSV_df <- RSV_ARI_SARI_Formatted %>% filter(RSV == "Detected")
+
+```
+
+
+## Assign age categories based on age of patients
+
+```{r }
+RSV_df$Age_group <- ""
+for (i in 1:nrow(RSV_df)){
+  if(RSV_df$Age[i] < 5){
+    RSV_df$Age_group[i] <- "ud5"
+  }else if(RSV_df$Age[i] >= 5 && RSV_df$Age[i] < 20){
+    RSV_df$Age_group[i] <- "ped"
+  } else if(RSV_df$Age[i] >= 20 && RSV_df$Age[i] < 55){
+    RSV_df$Age_group[i] <- "adu"
+  }else if(RSV_df$Age[i] >= 55){
+    RSV_df$Age_group[i] <- "eld"
+  }
+}
+
+RSV_df$Age_group <- factor(RSV_df$Age_group,
+                           levels = c("adu", "eld", "ped", "ud5"))
+
+RSV_df$Age_group2 <- ""
+for (i in 1:nrow(RSV_df)){
+  if(RSV_df$Age[i] < 1){
+    RSV_df$Age_group2[i] <- "ud1"
+  }else if(RSV_df$Age[i] >= 1 && RSV_df$Age[i] < 5){
+    RSV_df$Age_group2[i] <- "ud5"
+  }else if(RSV_df$Age[i] >= 5 && RSV_df$Age[i] < 20){
+    RSV_df$Age_group2[i] <- "ped"
+  } else if(RSV_df$Age[i] >= 20 && RSV_df$Age[i] < 55){
+    RSV_df$Age_group2[i] <- "adu"
+  }else if(RSV_df$Age[i] >= 55){
+    RSV_df$Age_group2[i] <- "eld"
+  }
+}
+
+RSV_df$Age_group2 <- factor(RSV_df$Age_group2,
+                           levels = c("eld", "adu", "ped", "ud5","ud1"), labels = c("Over 55","19 - 55","5 - 18","1 - 4", "Under 1"))
+
+```
+
+## Define outcome as ARI, SARI, or ICU
+
+```{r}
+
+RSV_df$Outcome <- RSV_df$Type
+icu_idx <- which(RSV_df$ICU_admission == "ICU")
+RSV_df$Outcome[icu_idx] <- "ICU"
+
+
+RSV_df <- RSV_df %>%
+  mutate(Severity = case_when(
+    ICU_admission == "ICU" ~ "ICU",        # ICU overrides everything
+    Type == "ARI" ~ "ARI",                 # If type is ARI
+    Type == "SARI" ~ "SARI",               # If type is SARI
+    TRUE ~ NA_character_                   # For other/missing cases
+  ))
+
+```
+
+### Count annual cases in each age group
+```{r}
+
+Type_Counts <- RSV_df %>% group_by(Type,Year,Month,Age_group2) %>% summarise(Count=n())
+
+Type_Counts <- Type_Counts %>%
+  mutate(Date = ymd(paste(Year, Month, "01", sep = "-")))  # Assuming Month is in numeric form
+
+ggplot() +  geom_bar(
+   data = Type_Counts, 
+   aes(x = Date, y = Count, fill = Age_group2),   
+   position = "stack", stat = "identity", alpha = 0.8
+ ) + scale_fill_manual(values = c("#980043", "#c994c7", "#f1eef6", "#9ecae1","#08519c")) + 
+  labs(fill = "Age Group", y = "Case Count") +  # Color palette for pathogens
+theme_classic() + theme(axis.text.x = element_text(angle = 60, hjust = 1),legend.position = "bottom") + # Customize x-axis labels# Position the legend at the bottom
+  scale_x_date(date_breaks = "6 months", date_labels = "%b %Y") + facet_wrap(.~Type, nrow = 2)
+
+
+
+
+Severity_Counts <- RSV_df %>% group_by(Severity,Year,Month,Age_group2) %>% summarise(Count=n())
+
+Severity_Counts <- Severity_Counts %>%
+  mutate(Date = ymd(paste(Year, Month, "01", sep = "-")))  # Assuming Month is in numeric form
+
+Severity_Counts$Severity <- recode(
+  Severity_Counts$Severity,
+  "ICU" = "Intensive care",
+  "SARI" = "Admitted",
+  "ARI" = "Acute"
+)
+
+Severity_Age_group_plot <- ggplot() +  geom_bar(
+   data = Severity_Counts, 
+   aes(x = Date, y = Count, fill = Age_group2),   
+   position = "stack", stat = "identity", alpha = 0.8
+ ) + scale_fill_manual(values = c("#980043","#e7298a","#c994c7", "#9ecae1","#08519c")) + 
+  labs(fill = "Age Group", y = "Case Count") +  # Color palette for pathogens
+theme_classic() + theme(axis.text.x = element_text(angle = 60, hjust = 1),legend.position = "bottom") + # Customize x-axis labels# Position the legend at the bottom
+  scale_x_date(date_breaks = "6 months", date_labels = "%b %Y") + facet_wrap(.~Severity, nrow = 3, scales = "free_y")
+
+
+ggsave(
+  filename = "Severity_Age_group_plot.pdf",
+  plot = Severity_Age_group_plot,
+  device = "pdf",
+  width = 8.27,   # A4 width in inches
+  height = 11.69, # A4 height in inches
+  units = "in"
+)
+
+ggsave(
+  filename = "Severity_Age_group_plot_small.pdf",
+  plot = Severity_Age_group_plot,
+  device = "pdf",
+  width = 6.27,   # A4 width in inches
+  height = 8.69, # A4 height in inches
+  units = "in"
+)
+
+```
+
+
+
+### Count annual cases for SARI and ICU and measure incidence per 100000 annually
+```{r}
+
+SARI_Total_Annual_counts <- RSV_df %>% group_by(Year,Type) %>% summarize(Count=n()) %>% filter(Type == "SARI")
+
+popn <- read.csv("../../SARI/Annual_population.csv")
+AD_rep <- read.csv("../../UAE_population_pyramid/AD_Emirate_Admissions_total_SSMC.csv")
+AD_rep_age <- read.csv("../../UAE_population_pyramid/AD_Emirate_Admissions_Age_SSMC.csv")
+AD_rep_age <- AD_rep_age %>%
+  rename(Age_category = Age_Group2)
+
+SARI_Total_Annual_counts <- merge(SARI_Total_Annual_counts,popn, by=c("Year"))
+SARI_Total_Annual_counts <- merge(SARI_Total_Annual_counts,AD_rep, by = c("Year"))
+SARI_Total_Annual_counts$Offset <- SARI_Total_Annual_counts$proportion * SARI_Total_Annual_counts$Emirate_Population
+
+
+
+
+# Make sure Year is a factor
+SARI_Total_Annual_counts <- SARI_Total_Annual_counts %>%
+  mutate(Year = as.factor(Year))
+
+# Fit Poisson regression
+model <- glm(Count ~ Year,
+             family = poisson(link = "log"),
+             offset = log(Offset),
+             data = SARI_Total_Annual_counts)
+
+summary(model)
+
+results <- broom::tidy(model, exponentiate = TRUE, conf.int = TRUE)
+results
+
+# Predict fitted values with standard errors
+pred <- predict(model, type = "link", se.fit = TRUE)
+
+# Compute 95% CI on the log scale
+fit <- pred$fit
+se <- pred$se.fit
+
+lower <- fit - 1.96 * se
+upper <- fit + 1.96 * se
+
+# Back-transform from log scale and standardize by Offset
+SARI_Total_Annual_counts <- SARI_Total_Annual_counts %>%
+  mutate(
+    fitted_count = exp(fit),
+    fitted_incidence = fitted_count / Offset * 1e5,        # per 100,000 pop
+    lower_count = exp(lower),
+    upper_count = exp(upper),
+    lower_incidence = lower_count / Offset * 1e5,
+    upper_incidence = upper_count / Offset * 1e5
+  )
+
+# View results
+SARI_Incidence <- SARI_Total_Annual_counts %>%
+  dplyr::select(Year, Count, fitted_incidence, lower_incidence, upper_incidence)
+
+SARI_Incidence <- SARI_Incidence %>%
+  mutate(Year_num = as.numeric(as.character(Year)))
+
+SARI_plot <- SARI_Incidence %>% ggplot(aes(x = Year_num, y = fitted_incidence)) +
+  # 95% CI as ribbons (semi-transparent), drawn behind lines/points
+  geom_ribbon(aes(ymin = lower_incidence, ymax = upper_incidence),
+              alpha = 0.15, linewidth = 0, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = unique(SARI_Incidence$Year_num),
+                     labels = unique(as.character(SARI_Incidence$Year))) +
+  labs(
+    x = "Year",
+    y = "Admission per 100,000"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+###
+```{r}
+ICU_Total_Annual_counts <- RSV_df %>% group_by(Year,ICU_admission) %>% summarize(Count=n()) %>% filter(ICU_admission == "ICU")
+
+#popn <- read.csv("../../SARI/Annual_population.csv")
+
+ICU_Total_Annual_counts <- merge(ICU_Total_Annual_counts,popn, by=c("Year"))
+
+ICU_Total_Annual_counts <- merge(ICU_Total_Annual_counts,AD_rep, by = c("Year"))
+ICU_Total_Annual_counts$Offset <- ICU_Total_Annual_counts$proportion * ICU_Total_Annual_counts$Emirate_Population
+
+
+
+# Make sure Year is a factor
+ICU_Total_Annual_counts <- ICU_Total_Annual_counts %>%
+  mutate(Year = as.factor(Year))
+
+# Fit Poisson regression
+modelicu <- glm(Count ~ Year,
+             family = poisson(link = "log"),
+             offset = log(Offset),
+             data = ICU_Total_Annual_counts)
+
+summary(modelicu)
+
+# Predict fitted values with standard errors
+predicu <- predict(modelicu, type = "link", se.fit = TRUE)
+
+# Compute 95% CI on the log scale
+fiticu <- predicu$fit
+seicu <- predicu$se.fit
+
+lowericu <- fiticu - 1.96 * seicu
+uppericu <- fiticu + 1.96 * seicu
+
+# Back-transform from log scale and standardize by Offset
+ICU_Total_Annual_counts <- ICU_Total_Annual_counts %>%
+  mutate(
+    fitted_counticu = exp(fiticu),
+    fitted_incidenceicu = fitted_counticu / Offset * 1e5,        # per 100,000 pop
+    lower_counticu = exp(lowericu),
+    upper_counticu = exp(uppericu),
+    lower_incidenceicu = lower_counticu / Offset * 1e5,
+    upper_incidenceicu = upper_counticu / Offset * 1e5
+  )
+
+# View results
+ICU_Incidence <- ICU_Total_Annual_counts %>%
+  dplyr::select(Year, Count, fitted_incidenceicu, lower_incidenceicu, upper_incidenceicu)
+
+ICU_Incidence <- ICU_Incidence %>%
+  mutate(Year_num = as.numeric(as.character(Year)))
+
+ICU_plot <- ICU_Incidence %>% ggplot(aes(x = Year_num, y = fitted_incidenceicu)) +
+  # 95% CI as ribbons (semi-transparent), drawn behind lines/points
+  geom_ribbon(aes(ymin = lower_incidenceicu, ymax = upper_incidenceicu),
+              alpha = 0.15, linewidth = 0, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_continuous(breaks = unique(ICU_Incidence$Year_num),
+                     labels = unique(as.character(ICU_Incidence$Year))) +
+  labs(
+    x = "Year",
+    y = "ICU admission per 100,000 (log scale)"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+## Combine SARI and ICU plot
+```{r}
+SARI_Incidence <- SARI_Incidence %>%
+  mutate(Type = "Total Admissions")
+
+ICU_Incidence <- ICU_Incidence %>%
+  mutate(Type = "ICU Admissions",
+         fitted_incidence = fitted_incidenceicu,
+         lower_incidence  = lower_incidenceicu,
+         upper_incidence  = upper_incidenceicu)
+
+combined <- bind_rows(
+  SARI_Incidence %>% dplyr::select(Year_num, fitted_incidence, lower_incidence, upper_incidence, Type),
+  ICU_Incidence %>% dplyr::select(Year_num, fitted_incidence, lower_incidence, upper_incidence, Type)
+)
+
+Burden_plot <- ggplot(combined, aes(x = Year_num, y = fitted_incidence, color = Type, fill = Type)) +
+  geom_ribbon(aes(ymin = lower_incidence, ymax = upper_incidence), alpha = 0.15, linewidth = 0, color = NA) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_color_manual(values = c("Total Admissions" = "#1b9e77", "ICU Admissions" = "#d95f02")) +   # complementary palette
+  scale_fill_manual(values = c("Total Admissions" = "#1b9e77", "ICU Admissions" = "#d95f02")) +
+  labs(
+    x = "Year",
+    y = "Admissions per 100,000",
+    color = "",
+    fill = ""
+  ) +
+  theme_classic() +
+  theme(
+    legend.position = "bottom",
+  )
+
+Burden_plot_log <- ggplot(combined, aes(x = Year_num, y = fitted_incidence, color = Type, fill = Type)) +
+  geom_ribbon(aes(ymin = lower_incidence, ymax = upper_incidence), alpha = 0.15, linewidth = 0, color = NA) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+ scale_color_manual(values = c("Total Admissions" = "#1b9e77", "ICU Admissions" = "#d95f02")) +   # complementary palette
+  scale_fill_manual(values = c("Total Admissions" = "#1b9e77", "ICU Admissions" = "#d95f02")) +
+  scale_y_log10(labels = label_number(accuracy = 0.1)) +
+  labs(
+    x = "Year",
+    y = "Admissions per 100,000",
+    color = "",
+    fill = ""
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+  )
+
+```
+
+
+
+### Measure incidence across age groups
+
+```{r}
+SARI_age_counts <- RSV_df %>% group_by(Year,Age_group,Type) %>% summarize(Count=n()) %>% filter(Type == "SARI")
+
+SARI_age_counts  <- merge(SARI_age_counts,popn, by=c("Year"))
+
+### Import Ad Region Age pyramid and get the proportions for each of the age categories specified
+Summarize_pyramid <- function(df,Yr){
+  
+  ud5 <- df$Age[1]
+  ped <- df$Age[2:4]
+  adu <- df$Age[5:11]
+  eld <- df$Age[12:nrow(df)]
+  for (i in 1:nrow(df)){
+    if(df$Age[i] %in% ud5){
+      df$Age_category[i] <- "ud5"
+    } else if(df$Age[i] %in% ped){
+      df$Age_category[i] <- "ped"
+    } else if(df$Age[i] %in% adu){
+      df$Age_category[i] <- "adu"
+    }else if(df$Age[i] %in% eld){
+      df$Age_category[i] <- "eld"
+    }
+  }
+  
+  df$Year <- Yr
+  df$Sum <- df$M + df$'F'
+  
+  tbl <- df %>% group_by(Age_category) %>% summarize(Group = sum(Sum))
+  tbl$Pop <- sum(tbl$Group)
+  tbl$Prop <- tbl$Group/tbl$Pop
+  return(tbl)
+}
+
+### USE Age pryamid from AD region
+PADR <- read.csv("../../UAE_population_pyramid/AD_region_pop_pyramid.csv")
+
+AD_Region_Age_Structure <- Summarize_pyramid(PADR,"")
+AD_Region_Age_Structure <- AD_Region_Age_Structure %>% dplyr::select(Age_category,Prop) 
+
+#### Merge pop recentages into cases to generate offset
+SARI_age_counts <- SARI_age_counts %>%
+  rename(Age_category = Age_group)
+
+
+SARI_age_counts <- merge(SARI_age_counts,AD_Region_Age_Structure,by=c("Age_category"))
+
+SARI_age_counts <- merge(SARI_age_counts,AD_rep_age, by = c("Year","Age_category")) 
+SARI_age_counts <- merge(SARI_age_counts,AD_Region_Age_Structure,by=c("Age_category"))
+
+SARI_age_counts$Offset <- SARI_age_counts$proportion * SARI_age_counts$Prop * SARI_age_counts$Emirate_Population
+
+
+# Make sure Year and Age_group are factors
+SARI_age_counts <- SARI_age_counts %>%
+  mutate(
+    Year = as.factor(Year),
+    Age_group = as.factor(Age_category)
+  )
+
+# Fit Poisson regression
+model_age_year <- glm(
+  Count ~ Year + Age_group, 
+  family = poisson(link = "log"),
+  offset = log(Offset),   # replace with the actual population column
+  data = SARI_age_counts
+)
+
+summary(model_age_year)
+
+# Predictions with SE
+pred_age_year <- predict(model_age_year, type = "link", se.fit = TRUE)
+
+fit_age_year  <- pred_age_year$fit
+se_age_year   <- pred_age_year$se.fit
+
+# Confidence intervals on log scale
+lower_age_year <- fit_age_year - 1.96 * se_age_year
+upper_age_year <- fit_age_year + 1.96 * se_age_year
+
+# Back-transform and scale per 100,000 population
+SARI_age_counts <- SARI_age_counts %>%
+  mutate(
+    fitted_count_AY     = exp(fit_age_year),
+    fitted_incidence_AY = fitted_count_AY / Offset * 1e5,
+    lower_incidence_AY  = exp(lower_age_year) / Offset * 1e5,
+    upper_incidence_AY  = exp(upper_age_year) / Offset * 1e5
+  )
+
+# View results
+SARI_age_counts %>%
+  dplyr::select(Year, Age_category, Count, 
+         fitted_incidence_AY, lower_incidence_AY, upper_incidence_AY)
+
+
+```
+
+## Plot incidence by age group
+```{r}
+# Ensure Year is ordered correctly on x-axis
+
+SARI_age_counts <- SARI_age_counts %>%
+  mutate(
+    # map short codes to full names for legend
+    Age_group_full = fct_recode(
+      factor(Age_group),
+      "Under 5" = "ud5",
+      "5 - 18"   = "ped",
+      "19 - 55"  = "adu",
+      "Over 55"  = "eld"
+    ),
+    # set desired display order
+    Age_group_full = fct_relevel(Age_group_full,
+      "Under 5", "5 - 18", "19 - 55", "Over 55"
+    ),
+    # guard against zero/negative lower bounds for log scale
+    lower_incidence_AY  = pmax(lower_incidence_AY,  .Machine$double.eps),
+    upper_incidence_AY  = pmax(upper_incidence_AY,  .Machine$double.eps),
+    fitted_incidence_AY = pmax(fitted_incidence_AY, .Machine$double.eps),
+    # make Year numeric for nicer spacing; keep original labels
+    Year_num = as.numeric(as.character(Year))
+  )
+
+
+SARI_AGE_plot <- ggplot(SARI_age_counts,
+       aes(x = Year_num, y = fitted_incidence_AY, color = Age_group_full, group = Age_group_full)) +
+  # 95% CI as ribbons (semi-transparent), drawn behind lines/points
+  geom_ribbon(aes(ymin = lower_incidence_AY, ymax = upper_incidence_AY, fill = Age_group_full),
+              alpha = 0.15, linewidth = 0, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  #scale_y_log10(labels = label_number(accuracy = 0.1)) +
+  scale_x_continuous(breaks = unique(SARI_age_counts$Year_num),
+                     labels = unique(as.character(SARI_age_counts$Year))) +
+  scale_fill_manual(values = c("#980043", "#df65b0", "#c994c7", "#08519c")) +
+  labs(
+    x = "Year",
+    y = "Admissions per 100,000",
+    color = "Age group"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+SARI_AGE_plot_log <- ggplot(SARI_age_counts,
+       aes(x = Year_num, y = fitted_incidence_AY, color = Age_group_full, group = Age_group_full)) +
+  # 95% CI as ribbons (semi-transparent), drawn behind lines/points
+  geom_ribbon(aes(ymin = lower_incidence_AY, ymax = upper_incidence_AY, fill = Age_group_full),
+              alpha = 0.15, linewidth = 0, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_y_log10(labels = label_number(accuracy = 0.1)) +
+  scale_x_continuous(breaks = unique(SARI_age_counts$Year_num),
+                     labels = unique(as.character(SARI_age_counts$Year))) +
+  scale_fill_manual(values = c("#08519c", "#c994c7","#e7298a","#980043")) +
+  scale_colour_manual(values = c("#08519c", "#c994c7","#e7298a","#980043")) +
+  labs(
+    x = "Year",
+    y = "Admissions per 100,000",
+    color = "Age group"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "none",
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+## Measure incidence of ICU admissions by age group
+```{r}
+ICU_age_counts <- RSV_df %>% group_by(Year,Age_group,ICU_admission) %>% summarize(Count=n()) %>% filter(ICU_admission == "ICU")
+ICU_age_counts  <- merge(ICU_age_counts,popn, by=c("Year"))
+
+
+ICU_age_counts <- ICU_age_counts %>%
+  rename(Age_category = Age_group)
+
+
+ICU_age_counts <- merge(ICU_age_counts,AD_Region_Age_Structure,by=c("Age_category"))
+
+ICU_age_counts <- merge(ICU_age_counts,AD_rep_age, by = c("Year","Age_category")) 
+
+ICU_age_counts$Offset <- ICU_age_counts$proportion * ICU_age_counts$Prop * ICU_age_counts$Emirate_Population
+
+
+ICU_age_counts <- ICU_age_counts %>%
+  mutate(
+    Year = as.factor(Year),
+    Age_group = as.factor(Age_category)
+  )
+
+# Poisson model
+model_ICU_age_year <- glm(
+  Count ~ Year + Age_category,
+  family = poisson(link = "log"),
+  offset = log(Offset),
+  data = ICU_age_counts
+)
+
+summary(model_ICU_age_year)
+
+pred_ICU <- predict(model_ICU_age_year, type = "link", se.fit = TRUE)
+
+fit_ICU  <- pred_ICU$fit
+se_ICU   <- pred_ICU$se.fit
+
+lower_ICU <- fit_ICU - 1.96 * se_ICU
+upper_ICU <- fit_ICU + 1.96 * se_ICU
+
+ICU_age_counts <- ICU_age_counts %>%
+  mutate(
+    fitted_count_ICU     = exp(fit_ICU),
+    fitted_incidence_ICU = fitted_count_ICU / Offset * 1e5,
+    lower_incidence_ICU  = exp(lower_ICU) / Offset * 1e5,
+    upper_incidence_ICU  = exp(upper_ICU) / Offset * 1e5
+  )
+
+
+ICU_age_counts <- ICU_age_counts %>%
+  mutate(
+    Age_group_full = fct_recode(
+      factor(Age_category),
+      "Under 5" = "ud5",
+      "5 - 18"   = "ped",
+      "19 - 55"  = "adu",
+      "Over 55"  = "eld"
+    ),
+    # set desired display order
+    Age_group_full = fct_relevel(Age_group_full,
+      "Under 5", "5 - 18", "19 - 55", "Over 55"
+    ),
+    lower_incidence_ICU = pmax(lower_incidence_ICU, .Machine$double.eps),
+    upper_incidence_ICU = pmax(upper_incidence_ICU, .Machine$double.eps),
+    fitted_incidence_ICU = pmax(fitted_incidence_ICU, .Machine$double.eps),
+    Year_num = as.numeric(as.character(Year))
+  )
+
+ICU_age_plot <- ggplot(ICU_age_counts,
+       aes(x = Year_num, y = fitted_incidence_ICU,
+           color = Age_group_full, group = Age_group_full)) +
+  geom_ribbon(aes(ymin = lower_incidence_ICU, ymax = upper_incidence_ICU,
+                  fill = Age_group_full),
+              alpha = 0.15, linewidth = 0, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  #scale_y_log10(labels = label_number(accuracy = 0.1)) +
+  scale_x_continuous(breaks = unique(ICU_age_counts$Year_num),
+                     labels = unique(as.character(ICU_age_counts$Year))) +
+  labs(
+    x = "Year",
+    y = "ICU Admissions per 100,000",
+    color = "Age group"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "right",
+    panel.grid.minor = element_blank()
+  )
+
+ICU_age_plot_log <- ggplot(ICU_age_counts,
+       aes(x = Year_num, y = fitted_incidence_ICU,
+           color = Age_group_full, group = Age_group_full)) +
+  geom_ribbon(aes(ymin = lower_incidence_ICU, ymax = upper_incidence_ICU,
+                  fill = Age_group_full),
+              alpha = 0.15, linewidth = 0, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  scale_fill_manual(values = c("#08519c", "#c994c7","#e7298a","#980043")) +
+  scale_colour_manual(values = c("#08519c", "#c994c7","#e7298a","#980043")) +
+  geom_point(size = 2) +
+  scale_y_log10(labels = label_number(accuracy = 0.1)) +
+  scale_x_continuous(breaks = unique(ICU_age_counts$Year_num),
+                     labels = unique(as.character(ICU_age_counts$Year))) +
+  labs(
+    x = "Year",
+    y = "ICU Admissions per 100,000",
+    color = "Age Group"
+  ) +
+  theme_classic(base_size = 12) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.minor = element_blank()
+  )
+
+Burden_panel_plot <- plot_grid(Burden_plot,SARI_AGE_plot_log,ICU_age_plot_log, rel_heights = c(1,0.8,1), ncol = 1, labels = c("B","C","D"))
+
+
+Epi_panel_figure <- plot_grid(Severity_Age_group_plot,Burden_panel_plot, labels = "AUTO")
+
+ggsave(
+  filename = "RSV_Epi_Panel_figure_2026.pdf",
+  plot = Epi_panel_figure,
+  device = "pdf",
+  height = 12,   # A4 width in inches
+  width = 15, # A4 height in inches
+  units = "in"
+)
+
+ggsave(
+  filename = "Age_Severity_RSV_Panel_figure_2026.pdf",
+  plot = Burden_panel_plot,
+  device = "pdf",
+  width = 8.27,   # A4 width in inches
+  height = 11.69, # A4 height in inches
+  units = "in"
+)
+
+```
+
+## Ordinal regression for severity
+
+```{r}
+
+RSV_df2 <- RSV_df %>%
+  mutate(
+    Severity = factor(Severity, levels = c("ARI", "SARI", "ICU"), ordered = TRUE),
+    Age_group2 = factor(Age_group2, levels = c("5 - 18", "Under 1", "1 - 4", "19 - 55","Over 55")) # adu as reference
+  )
+
+# Ordinal logistic regression
+ord_model <- MASS::polr(Severity ~ Age_group2 + as.factor(Year), data = RSV_df2, Hess = TRUE)
+
+# Extract ORs and 95% CI
+ord_results <- broom::tidy(ord_model, exponentiate = TRUE, conf.int = TRUE)
+ord_results
+
+# Tidy ORs for predictors (exclude thresholds "zeta")
+ord_results <- broom::tidy(ord_model, exponentiate = TRUE, conf.int = TRUE) %>%
+  filter(coef.type == "coefficient") %>%
+  mutate(
+    Age_group_code = sub("^Age_group", "", term),
+    Age_group_label = recode(Age_group_code,
+      "ped" = "Paediatric", "eld" = "Elderly", "ud5" = "Under 5"
+    ),
+    # Order for display; adult is reference and not shown (that’s expected)
+    Age_group_label = factor(Age_group_label, levels = c("Paediatric","Elderly","Under 5"))
+  )
+
+## tidy up results of the ordinal regression
+Age_plot_df <- ord_results %>%
+  filter(grepl("^Age_group2", term)) %>%              # keep only age group terms
+  mutate(
+    term = gsub("^Age_group2", "", term),             # remove prefix
+    term = factor(term,
+                             levels = c("Under 1", "1 - 4","19 - 55","Over 55"),
+                             ordered = TRUE)
+  )
+
+
+# Forest plot (horizontal; log scale on x)
+Severity_plot <- ggplot(Age_plot_df,
+       aes(y = term, x = estimate, xmin = conf.low, xmax = conf.high)) +
+  geom_vline(xintercept = 1, linetype = "dashed") +
+  geom_pointrange(size = 0.4) +
+  scale_x_log10(labels = label_number(accuracy = 0.1)) +
+  labs(
+    x = "Log Odds of Higher Severity (95% CI)",
+    y = "Age group (Ref = 5-18)"
+  ) +
+  theme_classic(base_size = 12)
+
+ggsave(
+  filename = "Age_Severity_Odds.pdf",
+  plot = Severity_plot,
+  device = "pdf",
+  width = 4,   # A4 width in inches
+  height = 4, # A4 height in inches
+  units = "in"
+)
+
+
+```
+
+```{r}
+RSV_panel <- plot_grid(Burden_plot,SARI_AGE_plot,Severity_plot,ICU_age_plot,labels = c("A","C","B","D"))
+
+save(RSV_df, file = "RSV_clean_positives_only_df2.RData")
+
+# 297 mm = 11.7 inches, 210 mm = 8.3 inches
+ggsave("RSV_panel.pdf", RSV_panel,width = 11.7, height = 8.3)
+
+
+```
+
