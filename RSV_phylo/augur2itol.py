@@ -1,7 +1,7 @@
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -14,18 +14,30 @@ TREE_CONFIG = {
 }
 
 
-DISPLAY_COUNTRY = {
-    "South_Africa": "South Africa",
-    "Cote_dIvoire": "Cote d'Ivoire",
-}
+# These are the only country/state labels currently observed in the local trees.
 
-
-MAP_COUNTRY = {
-    "USA": "United States",
-    "England": "United Kingdom",
-    "South_Africa": "South Africa",
-    "Cote_dIvoire": "Ivory Coast",
-    "Beijing": "China",
+COUNTRY_NORMALIZATION: Dict[str, Dict[str, str]] = {
+    "Australia": {"display": "Australia", "map": "Australia"},
+    "Beijing": {"display": "Beijing", "map": "China"},
+    "Canada": {"display": "Canada", "map": "Canada"},
+    "China": {"display": "China", "map": "China"},
+    "Cote_dIvoire": {"display": "Cote d'Ivoire", "map": "Ivory Coast"},
+    "England": {"display": "England", "map": "United Kingdom"},
+    "France": {"display": "France", "map": "France"},
+    "India": {"display": "India", "map": "India"},
+    "Iran": {"display": "Iran", "map": "Iran"},
+    "Ireland": {"display": "Ireland", "map": "Ireland"},
+    "Italy": {"display": "Italy", "map": "Italy"},
+    "Kenya": {"display": "Kenya", "map": "Kenya"},
+    "Norway": {"display": "Norway", "map": "Norway"},
+    "Pakistan": {"display": "Pakistan", "map": "Pakistan"},
+    "Philippines": {"display": "Philippines", "map": "Philippines"},
+    "Qatar": {"display": "Qatar", "map": "Qatar"},
+    "Russia": {"display": "Russia", "map": "Russia"},
+    "South_Africa": {"display": "South Africa", "map": "South Africa"},
+    "Spain": {"display": "Spain", "map": "Spain"},
+    "Thailand": {"display": "Thailand", "map": "Thailand"},
+    "USA": {"display": "USA", "map": "United States"},
 }
 
 
@@ -38,12 +50,27 @@ PANEL_ORDER = [
 
 
 def display_country(name: str) -> str:
-    return DISPLAY_COUNTRY.get(name, name.replace("_", " "))
+    normalized = COUNTRY_NORMALIZATION.get(name)
+    if normalized:
+        return normalized["display"]
+    return name.replace("_", " ")
 
 
 def map_country_name(name: str) -> str:
-    default = display_country(name)
-    return MAP_COUNTRY.get(name, default)
+    normalized = COUNTRY_NORMALIZATION.get(name)
+    if normalized:
+        return normalized["map"]
+    return display_country(name)
+
+
+def validate_country_normalization(edges: pd.DataFrame) -> None:
+    observed = set(edges["partner_country"].dropna().astype(str))
+    missing = sorted(country for country in observed if country not in COUNTRY_NORMALIZATION)
+    if missing:
+        raise ValueError(
+            "Unmapped partner_country values detected. "
+            "Extend COUNTRY_NORMALIZATION before plotting: %s" % ", ".join(missing)
+        )
 
 
 def get_country_state(node: dict) -> Tuple[Optional[str], Optional[float]]:
@@ -271,6 +298,8 @@ def make_global_map(map_summary: pd.DataFrame, threshold: float, out_base: Path)
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Make posterior-filtered UAE import/export world maps.")
     parser.add_argument("--threshold", type=float, default=0.9)
+    parser.add_argument("--tree-a-json", type=Path, default=None)
+    parser.add_argument("--tree-b-json", type=Path, default=None)
     return parser.parse_args()
 
 
@@ -285,15 +314,22 @@ def main() -> None:
 
     edge_tables = []
     for subtype, cfg in TREE_CONFIG.items():
+        if subtype == "A" and args.tree_a_json is not None:
+            json_path = args.tree_a_json
+        elif subtype == "B" and args.tree_b_json is not None:
+            json_path = args.tree_b_json
+        else:
+            json_path = root / cfg["json"]
         edge_tables.append(
             extract_uae_transition_edges(
                 subtype=subtype,
-                json_path=root / cfg["json"],
+                json_path=json_path,
                 threshold=args.threshold,
             )
         )
 
     edges = pd.concat(edge_tables, ignore_index=True)
+    validate_country_normalization(edges)
     summary = build_country_summary(edges)
     map_summary = build_map_summary(summary)
 
