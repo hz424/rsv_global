@@ -22,13 +22,11 @@ sns.set_style("ticks")
 
 # --- Configuration ---
 RESULTS_DIR = Path("results")
+HEATMAPS_DIR = RESULTS_DIR / "heatmaps"
 INPUT_FREQUENCY_TABLE = RESULTS_DIR / "rsv_F_mutation_frequency_by_country_mafft_extracted_final.tsv"
-OUTPUT_HEATMAP_FILE_A = RESULTS_DIR / "rsv_A_mutation_heatmap_UAE_vs_Public_gt1pct_or_gt2strains_gt30samples_v4.svg"
-OUTPUT_HEATMAP_FILE_B = RESULTS_DIR / "rsv_B_mutation_heatmap_UAE_vs_Public_gt1pct_or_gt2strains_gt30samples_v4.svg"
-# Per-type UAE frequency thresholds
-UAE_FREQUENCY_THRESHOLD_A = 0.01  # >1% for RSV-A
-UAE_FREQUENCY_THRESHOLD_B = 0.01  # >1% for RSV-B
-MIN_UAE_STRAIN_COUNT = 2          # Keep at least 3 UAE strains to avoid singletons
+OUTPUT_HEATMAP_FILE_A = HEATMAPS_DIR / "rsv_A_mutation_heatmap_UAE_vs_Public_ge2variants_gt30samples_v5.svg"
+OUTPUT_HEATMAP_FILE_B = HEATMAPS_DIR / "rsv_B_mutation_heatmap_UAE_vs_Public_ge2variants_gt30samples_v5.svg"
+MIN_UAE_STRAIN_COUNT = 2          # Recurrent mutations only; exclude singletons
 MIN_SAMPLE_THRESHOLD = 30         # Minimum samples for public data countries to be included
 ROW_MIN_FREQUENCY_FILTER_THRESHOLD = 0.95 # Filter out mutations if all countries have freq > this
 F_PROTEIN_LENGTH = 574 # Max length of F protein for the site axis
@@ -99,20 +97,26 @@ def generate_heatmap(data_df, virus_type, output_filename):
 
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
 
-    boundaries = [0, 0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.80, 0.85, 0.90, 0.95, 1.01]
+    # Keep zero as pure white and assign a distinct visible color to any positive frequency <=1%.
+    boundaries = [0.0, 1e-9, 0.01, 0.05, 0.10, 0.25, 0.50, 0.75, 0.80, 0.85, 0.90, 0.95, 1.01]
     num_colors = len(boundaries) - 1
     blues_cmap_base = matplotlib.colormaps.get_cmap('Blues')
 
-    color_list = []
-    discrete_colors_end_proportion = 0.7
-    num_discrete_bins_low_freq = 7
-
-    for i in range(num_discrete_bins_low_freq):
-        color_list.append(blues_cmap_base( (i / (num_discrete_bins_low_freq)) * discrete_colors_end_proportion ) )
-
-    num_gradient_bins_high_freq = 4
-    for i in range(num_gradient_bins_high_freq):
-        color_list.append(blues_cmap_base( discrete_colors_end_proportion + ( (i+1) / num_gradient_bins_high_freq ) * (1-discrete_colors_end_proportion) ) )
+    color_positions = [
+        0.00,  # exactly zero
+        0.22,  # >0 to 1%
+        0.34,  # 1-5%
+        0.44,  # 5-10%
+        0.56,  # 10-25%
+        0.68,  # 25-50%
+        0.76,  # 50-75%
+        0.82,  # 75-80%
+        0.87,  # 80-85%
+        0.91,  # 85-90%
+        0.95,  # 90-95%
+        0.995, # >95%
+    ]
+    color_list = [blues_cmap_base(pos) for pos in color_positions]
 
     if len(color_list) != num_colors:
         print("Warning: Color list length mismatch. Using default linspace sampling.", file=sys.stderr)
@@ -136,15 +140,15 @@ def generate_heatmap(data_df, virus_type, output_filename):
         linewidths=.5,
         linecolor='lightgray',
         cbar_ax=cbar_ax,
-        cbar_kws={'label': 'Mutation Frequency', 'ticks': boundaries[:-1], 'spacing': 'proportional', 'format': '%.2f'},
+        cbar_kws={'label': 'Mutation Frequency', 'ticks': boundaries[1:-1], 'spacing': 'proportional', 'format': '%.2f'},
         ax=ax
     )
-    cbar_ax.set_yticklabels([f'{b*100:.0f}%' for b in boundaries[:-1]])
+    cbar_ax.set_yticklabels(['>0%', '1%', '5%', '10%', '25%', '50%', '75%', '80%', '85%', '90%', '95%'])
     cbar_ax.yaxis.label.set_size(14)
     cbar_ax.tick_params(labelsize=12)
 
-    # Updated title to reflect new UAE filtering criteria (per-type thresholds)
-    uae_filter_desc = f"UAE: >{UAE_FREQUENCY_THRESHOLD_A*100:.0f}% (A) / >{UAE_FREQUENCY_THRESHOLD_B*100:.0f}% (B) and ≥{MIN_UAE_STRAIN_COUNT} strains"
+    # Updated title to reflect recurrent-mutation filtering in UAE
+    uae_filter_desc = f"UAE: ≥{MIN_UAE_STRAIN_COUNT} variants"
     public_filter_desc = f"Public N > {MIN_SAMPLE_THRESHOLD}"
     row_filter_desc = f"Not all Freq > {ROW_MIN_FREQUENCY_FILTER_THRESHOLD*100:.0f}%"
     full_filter_description = f"({uae_filter_desc}; {public_filter_desc}; {row_filter_desc})"
@@ -161,6 +165,9 @@ def generate_heatmap(data_df, virus_type, output_filename):
 
     ax.set_xticklabels(new_xticklabels, rotation=90, ha='right', rotation_mode='anchor')
     ax.tick_params(axis='x', labelsize=24)
+    current_yticklabels_texts = [label.get_text() for label in ax.get_yticklabels()]
+    cleaned_yticklabels = [re.sub(r'^[AB]:', '', text) for text in current_yticklabels_texts]
+    ax.set_yticklabels(cleaned_yticklabels, rotation=0)
     ax.tick_params(axis='y', labelsize=20, rotation=0)
 
     # --- Add Site Annotation Panel ---
@@ -268,6 +275,7 @@ def generate_heatmap(data_df, virus_type, output_filename):
 
 # --- Main Script ---
 print(f"Loading frequency data from: {INPUT_FREQUENCY_TABLE}")
+HEATMAPS_DIR.mkdir(parents=True, exist_ok=True)
 try:
     freq_df = pd.read_csv(INPUT_FREQUENCY_TABLE, sep='\t')
     print(f"Successfully loaded {len(freq_df)} frequency records.", file=sys.stderr)
@@ -297,7 +305,7 @@ if len(freq_df) < initial_rows:
     print(f"Warning: Dropped {initial_rows - len(freq_df)} rows due to missing/invalid Frequency or Total_Samples, or zero Total_Samples.", file=sys.stderr)
 
 
-print(f"Identifying mutations with frequency > {UAE_FREQUENCY_THRESHOLD_A*100:.0f}% (A) / {UAE_FREQUENCY_THRESHOLD_B*100:.0f}% (B) AND found in at least {MIN_UAE_STRAIN_COUNT} strains in UAE...")
+print(f"Identifying mutations found in at least {MIN_UAE_STRAIN_COUNT} UAE variants...")
 uae_df = freq_df[freq_df['Country'] == 'UAE'].copy()
 
 if uae_df.empty:
@@ -307,24 +315,17 @@ else:
     # Calculate the number of UAE strains with each mutation
     uae_df['Num_UAE_Strains_With_Mutation'] = uae_df['Frequency'] * uae_df['Total_Samples']
 
-    # Per-type frequency threshold
-    freq_thresh_map = {'A': UAE_FREQUENCY_THRESHOLD_A, 'B': UAE_FREQUENCY_THRESHOLD_B}
-    uae_df['FreqThresh'] = uae_df['Type'].map(freq_thresh_map).fillna(1.0)
-
-    # Condition 1: Frequency > per-type threshold
-    cond1_freq = uae_df['Frequency'] > uae_df['FreqThresh']
-    # Condition 2: At least MIN_UAE_STRAIN_COUNT UAE strains have the mutation
-    cond2_count = uae_df['Num_UAE_Strains_With_Mutation'] >= MIN_UAE_STRAIN_COUNT
-
-    # Combine conditions (AND)
-    uae_selected_mutations_df = uae_df[cond1_freq & cond2_count]
+    # Recurrent mutations only
+    uae_selected_mutations_df = uae_df[
+        uae_df['Num_UAE_Strains_With_Mutation'] >= MIN_UAE_STRAIN_COUNT
+    ]
     uae_high_freq_mutations = uae_selected_mutations_df['Mutation'].unique()
 
 if len(uae_high_freq_mutations) == 0:
-    print(f"No mutations found in UAE with frequency > {UAE_FREQUENCY_THRESHOLD*100:.0f}% OR in at least {MIN_UAE_STRAIN_COUNT} strains. Cannot generate heatmaps.", file=sys.stderr)
+    print(f"No mutations found in UAE in at least {MIN_UAE_STRAIN_COUNT} variants. Cannot generate heatmaps.", file=sys.stderr)
     sys.exit(0) # Exit gracefully if no mutations are selected
 
-print(f"Found {len(uae_high_freq_mutations)} mutations meeting the criteria in UAE (combined A and B).", file=sys.stderr)
+print(f"Found {len(uae_high_freq_mutations)} recurrent mutations meeting the UAE count criterion (combined A and B).", file=sys.stderr)
 # print(f"Selected UAE mutations: {list(uae_high_freq_mutations)}", file=sys.stderr) # Optional: for debugging
 
 print("Filtering data for selected mutations across all countries...")
