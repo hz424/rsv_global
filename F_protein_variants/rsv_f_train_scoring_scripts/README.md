@@ -2,6 +2,8 @@
 
 This folder contains the minimal local RSV F scripts needed for manuscript submission.
 
+A tiny runnable example for `compute_evescape_scores.py` is included in `toy_examples/evescape_minimal/`.
+
 Included scripts:
 
 - `make_eve_ready_msa.py`

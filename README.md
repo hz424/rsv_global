@@ -78,7 +78,7 @@ conda install -c conda-forge -c bioconda mafft minimap2 samtools bcftools emboss
 
 ## Tiny Example Input
 
-A minimal example input is provided in `toy_examples/evescape_minimal/`. It contains:
+A minimal example input is provided in `F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/`. It contains:
 
 - a toy RSV-A reference CDS
 - two toy EVE evolutionary-index seed files
@@ -92,14 +92,14 @@ From the repository root:
 ```bash
 python F_protein_variants/rsv_f_train_scoring_scripts/compute_evescape_scores.py \
   --subtype RSVA_F \
-  --evol_indices_pattern "toy_examples/evescape_minimal/evol_indices_seed*.csv" \
-  --wcn_csv toy_examples/evescape_minimal/wcn.csv \
-  --dissimilarity_csv toy_examples/evescape_minimal/dissimilarity_metrics.csv \
-  --reference_cds_fasta toy_examples/evescape_minimal/reference_cds.fasta \
-  --out_csv toy_examples/evescape_minimal/example_output.csv
+  --evol_indices_pattern "F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/evol_indices_seed*.csv" \
+  --wcn_csv F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/wcn.csv \
+  --dissimilarity_csv F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/dissimilarity_metrics.csv \
+  --reference_cds_fasta F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/reference_cds.fasta \
+  --out_csv F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/example_output.csv
 ```
 
-This command writes `toy_examples/evescape_minimal/example_output.csv`.
+This command writes `F_protein_variants/rsv_f_train_scoring_scripts/toy_examples/evescape_minimal/example_output.csv`.
 
 ## License
 
