@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compute EVEscape per-mutation scores for RSV F protein.
+"""Compute EVEscape scores for RSV F protein.
 
 Combines three components (EVEscape):
   1. Fitness        — EVE evolutionary indices (averaged across seeds)
