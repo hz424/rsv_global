@@ -1,6 +1,4 @@
-# Minimal Train + Scoring Scripts
-
-This folder contains the minimal local RSV F scripts needed for manuscript submission.
+# Train + Scoring Scripts
 
 A tiny runnable example for `compute_evescape_scores.py` is included in `toy_examples/evescape_minimal/`.
 
