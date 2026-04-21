@@ -1,0 +1,4 @@
+mutation,wt,i,mut,evolutionary_index,fitness_eve,evol_indices_std,fitness_z,accessibility_wcn,accessibility_z,structure_mapped,dissimilarity_charge_hydro,dissimilarity_z,evescape,evescape_composite,evescape_percentile,reference_codon,min_nt_distance_from_reference_codon,one_nt_accessible_from_reference,n_one_nt_accessible_aas,one_nt_accessible_aas,evescape_percentile_nt_distance_global,evescape_percentile_nt_distance_local,evescape_percentile_one_nt_global,evescape_percentile_one_nt_local
+M1I,M,1,I,0.5,-0.5,0.1414214,-0.8270639,0.2,-0.0949158,True,0.0730265,0.5189479,-2.5033855,0.0818076,0.6666667,ATG,1,True,6,"I,K,L,R,T,V",0.6666667,1.0,0.6666667,1.0
+A2V,A,2,V,-0.75,0.75,0.0707107,1.1113671,1.0,1.0440738,True,-0.1622214,-1.1527935,-1.6084189,0.2002039,1.0,GCT,1,True,6,"D,G,P,S,T,V",1.0,1.0,1.0,1.0
+K3R,K,3,R,0.15,-0.15,0.0707107,-0.2843032,-0.4,-0.949158,True,0.0891949,0.6338456,-2.6689064,0.069328,0.3333333,AAG,1,True,6,"E,M,N,Q,R,T",0.3333333,1.0,0.3333333,1.0

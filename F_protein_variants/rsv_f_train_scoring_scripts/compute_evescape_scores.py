@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Compute EVEscape scores for RSV F protein.
+"""Compute EVEscape per-mutation scores for RSV F protein.
 
-Combines three components (EVEscape):
-  1. Fitness        — EVE evolutionary indices (averaged across seeds)
+Combines three components (EVEscape formula, Frazer et al. 2022):
+  1. Fitness        — negative EVE evolutionary index (higher = more compatible)
   2. Accessibility  — WCN from PDB (negated, so higher = more accessible)
   3. Dissimilarity  — charge + Eisenberg-Weiss hydrophobicity difference
 
@@ -150,7 +150,13 @@ def main():
             df[col] = df[col].fillna(df[col].mean())
 
     # 5. Compute EVEscape
-    df["fitness_z"] = standardize(df["evol_indices"])
+    # EVE evolutionary indices are mutant-vs-wild-type likelihood ratios where larger
+    # values indicate lower sequence compatibility / stronger deleteriousness. EVEscape
+    # needs a fitness term where larger values are more compatible, so we negate here
+    # and keep the raw index for downstream auditing.
+    df["evolutionary_index"] = df["evol_indices"]
+    df["fitness_proxy"] = -df["evolutionary_index"]
+    df["fitness_z"] = standardize(df["fitness_proxy"])
     df["accessibility_z"] = standardize(df["wcn_fill_r"])
     df["dissimilarity_z"] = standardize(df["charge_ew-hydro"])
     df["evescape"] = (
@@ -180,7 +186,8 @@ def main():
 
     # Rename for clarity (matches EVEscape convention)
     df = df.rename(columns={
-        "evol_indices": "fitness_eve",
+        "evolutionary_index": "evolutionary_index",
+        "fitness_proxy": "fitness_eve",
         "wcn_fill_r": "accessibility_wcn",
         "charge_ew-hydro": "dissimilarity_charge_hydro",
     })
@@ -191,6 +198,7 @@ def main():
         "wt",
         "i",
         "mut",
+        "evolutionary_index",
         "fitness_eve",
         "evol_indices_std",
         "fitness_z",

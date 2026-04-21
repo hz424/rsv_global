@@ -1,0 +1,10 @@
+numpy
+pandas
+matplotlib
+scipy
+seaborn
+biopython
+
+# Optional packages used by some scripts
+statsmodels
+adjustText
