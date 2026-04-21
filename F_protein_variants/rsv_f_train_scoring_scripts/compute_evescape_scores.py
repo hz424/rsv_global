@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Compute EVEscape per-mutation scores for RSV F protein.
 
-Combines three components (EVEscape formula, Frazer et al. 2022):
+Combines three components (EVEscape):
   1. Fitness        — EVE evolutionary indices (averaged across seeds)
   2. Accessibility  — WCN from PDB (negated, so higher = more accessible)
   3. Dissimilarity  — charge + Eisenberg-Weiss hydrophobicity difference
