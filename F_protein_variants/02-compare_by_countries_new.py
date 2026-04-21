@@ -224,7 +224,6 @@ def align_and_extract_with_mafft(ref_cds_seq_record, public_seq_str, public_seq_
             return None
     return extracted_f_gene_cds
 
-# --- Worker function for parallel processing ---
 def process_public_sequence(args_tuple):
     """Process one public sequence: extract F-gene with MAFFT, translate, and find AA mutations."""
     accession_id, full_nt_public_str, country, rsv_type, \
