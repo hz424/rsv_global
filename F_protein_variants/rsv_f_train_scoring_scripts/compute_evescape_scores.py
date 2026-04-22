@@ -225,9 +225,11 @@ def main():
     df.to_csv(args.out_csv, index=False)
     print(f"  Wrote {len(df)} rows → {args.out_csv}")
     print(f"  EVEscape range: [{df.evescape.min():.4f}, {df.evescape.max():.4f}]")
+    n_positions_mapped = df.loc[df["structure_mapped"], "i"].nunique()
+
     print(
-        "  Structure coverage:",
-        f"{int(df.structure_mapped.sum()) // 19} positions mapped,"
+        " Structure coverage:",
+        f"{n_positions_mapped} positions mapped,"
         f" {df.structure_mapped.mean() * 100:.1f}% of single mutants directly mapped",
     )
 
